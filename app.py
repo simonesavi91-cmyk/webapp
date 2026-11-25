@@ -92,20 +92,6 @@ def scan_market(tickers):
 
             close_price = float(df['Close'].iloc[-1])
             delta = df['Close'].diff()
-            # Funzione di screening veloce per le classifiche Top 20
-@st.cache_data(ttl=900)
-def scan_market(tickers):
-    data = yf.download(tickers, period="6mo", group_by='ticker', threads=True, progress=False)
-    results = []
-
-    for ticker in tickers:
-        try:
-            df = data[ticker].dropna()
-            if len(df) < 50:
-                continue
-
-            close_price = float(df['Close'].iloc[-1])
-            delta = df['Close'].diff()
             gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
             loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
             rsi = float(100 - (100 / (1 + (gain / loss).iloc[-1])))
@@ -165,3 +151,65 @@ def scan_market(tickers):
             continue
 
     return pd.DataFrame(results)
+
+# --- INTERFACCIA A SCHEDE ---
+tab1, tab2 = st.tabs(["🧠 Analisi AI con Gemini (Triangolazione)", "🚀 Scanner Automatico (Top 20 Buy/Sell)"])
+
+with tab1:
+    st.subheader("🧠 Chiedi a Gemini di analizzare un Asset (Dati Tecnici + Notizie)")
+    st.markdown("Scegli un titolo dal menu a tendina oppure digita qualsiasi ticker (es. `NVDA`, `PLTR`, `SOFI`, `BTC-USD`, `HTLM`).")
+
+    col_sel1, col_sel2 = st.columns(2)
+    with col_sel1:
+        selected_preset = st.selectbox(
+            "Scegli dalla lista rapida:",
+            options=["-- Scrivi un ticker a mano --"] + [f"{k} - {v}" for k, v in ASSET_NAMES.items()]
+        )
+    with col_sel2:
+        manual_ticker = st.text_input("Oppure scrivi il Ticker qui:", "PLTR").upper().strip()
+
+    if selected_preset != "-- Scrivi un ticker a mano --":
+        target_ticker = selected_preset.split(" - ")[0].strip()
+    else:
+        target_ticker = manual_ticker
+
+    if st.button(f"✨ AVVIA ANALISI AI SU {target_ticker}", type="primary", use_container_width=True):
+        if not target_ticker:
+            st.warning("Inserisci o seleziona un ticker valido.")
+        else:
+            with st.spinner(f"⏳ Raccolta dati, notizie e ragionamento di Gemini su {target_ticker}..."):
+                try:
+                    stock = yf.Ticker(target_ticker)
+                    df = stock.history(period="6mo")
+
+                    if df.empty or len(df) < 30:
+                        st.error("❌ Dati insufficienti o ticker non trovato su Yahoo Finance.")
+                    else:
+                        close_price = float(df['Close'].iloc[-1])
+                        delta = df['Close'].diff()
+                        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+                        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+                        rsi = float(100 - (100 / (1 + (gain / loss).iloc[-1])))
+
+                        ema20 = float(df['Close'].ewm(span=20, adjust=False).mean().iloc[-1])
+                        ema50 = float(df['Close'].ewm(span=50, adjust=False).mean().iloc[-1])
+                        sma20 = float(df['Close'].rolling(window=20).mean().iloc[-1])
+                        std20 = float(df['Close'].rolling(window=20).std().iloc[-1])
+                        upper_bb = sma20 + (std20 * 2)
+                        lower_bb = sma20 - (std20 * 2)
+
+                        raw_news = stock.news
+                        headlines = []
+                        if raw_news:
+                            for item in raw_news[:7]:
+                                title = item.get('title') or item.get('content', {}).get('title', '')
+                                if title:
+                                    headlines.append(title)
+
+                        ai_report = ask_gemini_analysis(
+                            target_ticker, close_price, rsi, ema20, ema50, upper_bb, lower_bb, headlines
+                        )
+
+                        st.divider()
+                        c1, c2, c3, c4 = st.columns(4)
+                        c
