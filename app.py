@@ -57,8 +57,10 @@ def ask_gemini_analysis(ticker, price, rsi, ema20, ema50, upper_bb, lower_bb, ne
     DATI TECNICI ATTUALI:
     - Prezzo attuale: ${price:.2f}
     - RSI (14 giorni): {rsi:.1f}
-    - EMA 20: ${ema20:.2f} - EMA 50:${ema50:.2f}
-    - Banda di Bollinger Superiore: ${upper_bb:.2f} - Banda di Bollinger Inferiore:${lower_bb:.2f}
+    - EMA 20: ${ema20:.2f}
+    - EMA 50: ${ema50:.2f}
+    - Banda di Bollinger Superiore: ${upper_bb:.2f}
+    - Banda di Bollinger Inferiore: ${lower_bb:.2f}
 
     ULTIME NOTIZIE DI MERCATO:
     {news_text}
@@ -136,4 +138,132 @@ def scan_market(tickers):
                 score -= 15
                 signals.append("Sopra Banda Sup.")
 
-            score = max
+            score = max(5, min(95, score))
+
+            results.append({
+                "Asset": ASSET_NAMES.get(ticker, ticker),
+                "Ticker": ticker,
+                "Prezzo ($)": round(close_price, 2),
+                "RSI": round(rsi, 1),
+                "Prob. Buy (%)": score,
+                "Prob. Sell (%)": 100 - score,
+                "Segnali": ", ".join(signals) if signals else "Neutrale"
+            })
+        except Exception:
+            continue
+
+    return pd.DataFrame(results)
+
+# --- INTERFACCIA A SCHEDE ---
+tab1, tab2 = st.tabs(["🧠 Analisi AI con Gemini (Triangolazione)", "🚀 Scanner Automatico (Top 20 Buy/Sell)"])
+
+with tab1:
+    st.subheader("🧠 Chiedi a Gemini di analizzare un Asset (Dati Tecnici + Notizie)")
+    st.markdown("Scegli un titolo dal menu a tendina oppure digita qualsiasi ticker (es. `NVDA`, `PLTR`, `SOFI`, `BTC-USD`, `HTLM`).")
+
+    col_sel1, col_sel2 = st.columns(2)
+    with col_sel1:
+        selected_preset = st.selectbox(
+            "Scegli dalla lista rapida:",
+            options=["-- Scrivi un ticker a mano --"] + [f"{k} - {v}" for k, v in ASSET_NAMES.items()]
+        )
+    with col_sel2:
+        manual_ticker = st.text_input("Oppure scrivi il Ticker qui:", "PLTR").upper().strip()
+
+    if selected_preset != "-- Scrivi un ticker a mano --":
+        target_ticker = selected_preset.split(" - ")[0].strip()
+    else:
+        target_ticker = manual_ticker
+
+    if st.button(f"✨ AVVIA ANALISI AI SU {target_ticker}", type="primary", use_container_width=True):
+        if not target_ticker:
+            st.warning("Inserisci o seleziona un ticker valido.")
+        else:
+            with st.spinner(f"⏳ Raccolta dati, notizie e ragionamento di Gemini su {target_ticker}..."):
+                try:
+                    stock = yf.Ticker(target_ticker)
+                    df = stock.history(period="6mo")
+
+                    if df.empty or len(df) < 30:
+                        st.error("❌ Dati insufficienti o ticker non trovato su Yahoo Finance.")
+                    else:
+                        close_price = float(df['Close'].iloc[-1])
+                        delta = df['Close'].diff()
+                        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+                        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+                        rsi = float(100 - (100 / (1 + (gain / loss).iloc[-1])))
+
+                        ema20 = float(df['Close'].ewm(span=20, adjust=False).mean().iloc[-1])
+                        ema50 = float(df['Close'].ewm(span=50, adjust=False).mean().iloc[-1])
+                        sma20 = float(df['Close'].rolling(window=20).mean().iloc[-1])
+                        std20 = float(df['Close'].rolling(window=20).std().iloc[-1])
+                        upper_bb = sma20 + (std20 * 2)
+                        lower_bb = sma20 - (std20 * 2)
+
+                        raw_news = stock.news
+                        headlines = []
+                        if raw_news:
+                            for item in raw_news[:7]:
+                                title = item.get('title') or item.get('content', {}).get('title', '')
+                                if title:
+                                    headlines.append(title)
+
+                        ai_report = ask_gemini_analysis(
+                            target_ticker, close_price, rsi, ema20, ema50, upper_bb, lower_bb, headlines
+                        )
+
+                        st.divider()
+                        c1, c2, c3, c4 = st.columns(4)
+                        c1.metric("Prezzo", f"${close_price:.2f}")
+                        c2.metric("RSI (14)", f"{rsi:.1f}")
+                        c3.metric("EMA 20", f"${ema20:.2f}")
+                        c4.metric("EMA 50", f"${ema50:.2f}")
+
+                        st.markdown("### 🧠 Riflessione e Verdetto di Gemini")
+                        st.markdown(ai_report)
+
+                        with st.expander("📰 Vedi le notizie analizzate dall'AI"):
+                            if headlines:
+                                for h in headlines:
+                                    st.markdown(f"- {h}")
+                            else:
+                                st.write("Nessuna notizia recente restituita dal feed.")
+
+                        st.markdown("### 📊 Grafico Andamento (6 Mesi)")
+                        st.line_chart(df['Close'])
+
+                except Exception as e:
+                    st.error(f"Errore durante l'elaborazione: {e}")
+
+with tab2:
+    if st.button("🔄 Aggiorna Scansione Mercato"):
+        st.cache_data.clear()
+
+    with st.spinner("⏳ Scansione di azioni, mid-cap e criptovalute in corso..."):
+        df_results = scan_market(REVOLUT_WATCHLIST)
+
+    if df_results.empty:
+        st.error("Errore nel recupero dei dati di mercato.")
+    else:
+        top_20_buy = df_results.sort_values(by="Prob. Buy (%)", ascending=False).head(20)[
+            ["Asset", "Ticker", "Prezzo ($)", "RSI", "Prob. Buy (%)", "Segnali"]
+        ].reset_index(drop=True)
+
+        top_20_sell = df_results.sort_values(by="Prob. Sell (%)", ascending=False).head(20)[
+            ["Asset", "Ticker", "Prezzo ($)", "RSI", "Prob. Sell (%)", "Segnali"]
+        ].reset_index(drop=True)
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.subheader("🟢 TOP 20 DA COMPRARE")
+            st.dataframe(
+                top_20_buy, use_container_width=True, hide_index=True,
+                column_config={"Prob. Buy (%)": st.column_config.ProgressColumn("Score Tecnico", format="%d%%", min_value=0, max_value=100)}
+            )
+
+        with col2:
+            st.subheader("🔴 TOP 20 DA VENDERE")
+            st.dataframe(
+                top_20_sell, use_container_width=True, hide_index=True,
+                column_config={"Prob. Sell (%)": st.column_config.ProgressColumn("Score Vendita", format="%d%%", min_value=0, max_value=100)}
+            )
