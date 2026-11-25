@@ -173,7 +173,38 @@ with tab2:
     search_query = st.text_input("Inserisci il Ticker o il nome (es. AAPL, PLTR, ROKU, BTC-USD):", "PLTR").upper().strip()
 
     if st.button("🔎 Analizza Asset in Profondità"):
-        with st.spinner(f"Analisi di mercato e raccolta notizie per {search_query}..."):
-            try:
-                stock = yf.Ticker(search_query)
-                df = stock.history(period="6mo")
+        if not search_query:
+            st.warning("Inserisci un ticker valido.")
+        else:
+            with st.spinner(f"Analisi di mercato e raccolta notizie per {search_query}..."):
+                try:
+                    stock = yf.Ticker(search_query)
+                    df = stock.history(period="6mo")
+                    
+                    if df.empty:
+                        st.error("❌ Asset non trovato. Verifica il ticker corretto.")
+                    else:
+                        close_icon = float(df['Close'].iloc[-1])
+                        delta = df['Close'].diff()
+                        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+                        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+                        rsi = float(100 - (100 / (1 + (gain / loss).iloc[-1])))
+                        
+                        news_score, headlines = get_news_sentiment(search_query)
+                        
+                        st.divider()
+                        st.markdown(f"### Risultati Analisi per: `{search_query}`")
+                        
+                        col_a, col_b, col_c = st.columns(3)
+                        col_a.metric("Prezzo Attuale", f"${close_icon:.2f}")
+                        col_b.metric("RSI (14)", f"{rsi:.1f}")
+                        col_c.metric("Sentiment Notizie", f"{news_score}/100")
+
+                        st.markdown("#### 📰 Ultime Notizie e Triangolazione di Mercato:")
+                        for h in headlines:
+                            st.markdown(f"- {h}")
+
+                        st.markdown("#### 📊 Andamento Storico (6 Mesi)")
+                        st.line_chart(df['Close'])
+                except Exception as e:
+                    st.error(f"Si è verificato un errore durante la ricerca: {e}")
