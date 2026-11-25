@@ -92,6 +92,20 @@ def scan_market(tickers):
 
             close_price = float(df['Close'].iloc[-1])
             delta = df['Close'].diff()
+            # Funzione di screening veloce per le classifiche Top 20
+@st.cache_data(ttl=900)
+def scan_market(tickers):
+    data = yf.download(tickers, period="6mo", group_by='ticker', threads=True, progress=False)
+    results = []
+
+    for ticker in tickers:
+        try:
+            df = data[ticker].dropna()
+            if len(df) < 50:
+                continue
+
+            close_price = float(df['Close'].iloc[-1])
+            delta = df['Close'].diff()
             gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
             loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
             rsi = float(100 - (100 / (1 + (gain / loss).iloc[-1])))
@@ -139,4 +153,15 @@ def scan_market(tickers):
             score = max(5, min(95, score))
 
             results.append({
-                "Asset": ASSET_NAMES.get(ticker, ticker
+                "Asset": ASSET_NAMES.get(ticker, ticker),
+                "Ticker": ticker,
+                "Prezzo ($)": round(close_price, 2),
+                "RSI": round(rsi, 1),
+                "Prob. Buy (%)": score,
+                "Prob. Sell (%)": 100 - score,
+                "Segnali": ", ".join(signals) if signals else "Neutrale"
+            })
+        except Exception:
+            continue
+
+    return pd.DataFrame(results)
