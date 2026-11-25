@@ -79,7 +79,6 @@ def ask_gemini_analysis(ticker, price, rsi, ema20, ema50, upper_bb, lower_bb, ne
         return response.text
     except Exception as e:
         return f"❌ Errore durante la chiamata a Gemini: {e}"
-
 # Funzione di screening veloce per le classifiche Top 20
 @st.cache_data(ttl=900)
 def scan_market(tickers):
