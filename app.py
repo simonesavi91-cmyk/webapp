@@ -187,4 +187,73 @@ with tab1:
                     else:
                         close_price = float(df['Close'].iloc[-1])
                         delta = df['Close'].diff()
-                        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean
+                        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+                        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+                        rsi = float(100 - (100 / (1 + (gain / loss).iloc[-1])))
+
+                        ema20 = float(df['Close'].ewm(span=20, adjust=False).mean().iloc[-1])
+                        ema50 = float(df['Close'].ewm(span=50, adjust=False).mean().iloc[-1])
+                        sma20 = float(df['Close'].rolling(window=20).mean().iloc[-1])
+                        std20 = float(df['Close'].rolling(window=20).std().iloc[-1])
+                        upper_bb = sma20 + (std20 * 2)
+                        lower_bb = sma20 - (std20 * 2)
+
+                        headlines = []
+                        try:
+                            raw_news = stock.news
+                            if raw_news:
+                                for item in raw_news[:5]:
+                                    title = item.get('title') or item.get('content', {}).get('title', '')
+                                    if title:
+                                        headlines.append(title)
+                        except Exception:
+                            headlines = []
+
+                        ai_report = ask_gemini_analysis(
+                            target_ticker, close_price, rsi, ema20, ema50, upper_bb, lower_bb, headlines
+                        )
+
+                        st.divider()
+                        c1, c2, c3, c4 = st.columns(4)
+                        c1.metric("Prezzo", f"${close_price:.2f}")
+                        c2.metric("RSI (14)", f"{rsi:.1f}")
+                        c3.metric("EMA 20", f"${ema20:.2f}")
+                        c4.metric("EMA 50", f"${ema50:.2f}")
+
+                        st.markdown("### 🧠 Riflessione e Verdetto di Gemini")
+                        st.markdown(ai_report)
+
+                        with st.expander("📰 Vedi le notizie analizzate dall'AI"):
+                            if headlines:
+                                for h in headlines:
+                                    st.markdown(f"- {h}")
+                            else:
+                                st.write("Nessuna notizia recente disponibile o recuperata dal feed.")
+
+                        st.markdown("### 📊 Grafico Andamento (6 Mesi)")
+                        st.line_chart(df['Close'])
+
+                except Exception as e:
+                    st.error(f"Errore durante l'elaborazione: {e}")
+
+with tab2:
+    if st.button("🔄 Aggiorna Scansione Mercato"):
+        st.cache_data.clear()
+
+    with st.spinner("⏳ Scansione di azioni, mid-cap e criptovalute in corso..."):
+        df_results = scan_market(REVOLUT_WATCHLIST)
+
+    if df_results.empty:
+        st.error("Errore nel recupero dei dati di mercato.")
+    else:
+        top_20_buy = df_results.sort_values(by="Prob. Buy (%)", ascending=False).head(20)[
+            ["Asset", "Ticker", "Prezzo ($)", "RSI", "Prob. Buy (%)", "Segnali"]
+        ].reset_index(drop=True)
+
+        top_20_sell = df_results.sort_values(by="Prob. Sell (%)", ascending=False).head(20)[
+            ["Asset", "Ticker", "Prezzo ($)", "RSI", "Prob. Sell (%)", "Segnali"]
+        ].reset_index(drop=True)
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.subheader("🟢
