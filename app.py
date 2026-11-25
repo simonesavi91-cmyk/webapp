@@ -111,4 +111,56 @@ def scan_market(tickers):
 
             if rsi < 30:
                 score += 25
-            
+                signals.append("RSI Ipervenduto")
+            elif rsi < 40:
+                score += 10
+                signals.append("RSI Basso")
+            elif rsi > 70:
+                score -= 25
+                signals.append("RSI Ipercomprato")
+            elif rsi > 60:
+                score -= 10
+                signals.append("RSI Alto")
+
+            if close_price > ema_20 > ema_50:
+                score += 15
+                signals.append("Trend Rialzista")
+            elif close_price < ema_20 < ema_50:
+                score -= 15
+                signals.append("Trend Ribassista")
+
+            if close_price <= lower_bb:
+                score += 15
+                signals.append("Sotto Banda Inf.")
+            elif close_price >= upper_bb:
+                score -= 15
+                signals.append("Sopra Banda Sup.")
+
+            score = max(5, min(95, score))
+
+            results.append({
+                "Asset": ASSET_NAMES.get(ticker, ticker),
+                "Ticker": ticker,
+                "Prezzo ($)": round(close_price, 2),
+                "RSI": round(rsi, 1),
+                "Prob. Buy (%)": score,
+                "Prob. Sell (%)": 100 - score,
+                "Segnali": ", ".join(signals) if signals else "Neutrale"
+            })
+        except Exception:
+            continue
+
+    return pd.DataFrame(results)
+
+# --- INTERFACCIA A SCHEDE ---
+tab1, tab2 = st.tabs(["🧠 Analisi AI con Gemini (Triangolazione)", "🚀 Scanner Automatico (Top 20 Buy/Sell)"])
+
+with tab1:
+    st.subheader("🧠 Chiedi a Gemini di analizzare un Asset (Dati Tecnici + Notizie)")
+    st.markdown("Scegli un titolo dal menu a tendina oppure digita qualsiasi ticker (es. `NVDA`, `PLTR`, `SOFI`, `BTC-USD`, `HTLM`).")
+
+    col_sel1, col_sel2 = st.columns(2)
+    with col_sel1:
+        selected_preset = st.selectbox(
+            "Scegli dalla lista rapida:",
+            options=["-- Scrivi un ticker a mano --"] + [f"{k} - {v}" for k, v in ASSET_NAMES.items
