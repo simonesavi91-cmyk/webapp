@@ -87,13 +87,9 @@ if st.button("🔍 Analizza Titolo"):
                     st.markdown(f"**Percentuale di Successo Stimata:** {score}%")
                     st.progress(score / 100)
 
-                    st.markdown("### 🔍 Dettagli Tecnici:")
-                    for r in reasons:
-                        st.markdown(f"- {r}")
-
                     # Grafico storico dei prezzi integrato
                     st.markdown("### 📊 Andamento Ultimi 6 Mesi")
                     st.line_chart(df['Close'])
 
             except Exception as e:
-                st.error(f si è verificato un errore durante l'elaborazione: {e})
+                st.error(f"Si è verificato un errore durante l'elaborazione: {e}")
