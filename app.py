@@ -44,7 +44,7 @@ ASSET_NAMES = {
 
 REVOLUT_WATCHLIST = list(ASSET_NAMES.keys())
 
-# Funzione che passa dati tecnici e news a Gemini (con modello aggiornato)
+# Funzione che passa dati tecnici e news a Gemini con il modello aggiornato
 def ask_gemini_analysis(ticker, price, rsi, ema20, ema50, upper_bb, lower_bb, news_list):
     if not ai_ready:
         return "⚠️ Chiave API mancante. Inserisci la chiave di Google AI Studio in alto o nei Secrets per avviare l'analisi."
@@ -73,7 +73,7 @@ def ask_gemini_analysis(ticker, price, rsi, ema20, ema50, upper_bb, lower_bb, ne
 
     try:
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.8-flash",
             contents=prompt
         )
         return response.text
