@@ -7,28 +7,96 @@ import numpy as np
 st.set_page_config(page_title="Revolut Auto-Scanner", page_icon="🚀", layout="wide")
 
 st.title("🚀 Revolut Market Auto-Scanner")
-st.markdown("Scansione automatica di azioni, ETF e criptovalute disponibili su Revolut. Classifica in tempo reale dei **Top 20 Buy** e **Top 20 Sell** basata su indicatori tecnici combinati.")
+st.markdown("Scansione automatica di azioni, ETF e criptovalute disponibili su Revolut con nomi estesi. Classifica in tempo reale dei **Top 20 Buy** e **Top 20 Sell**.")
 
-# Paniere ampio di asset popolari disponibili su Revolut (Azioni US, Tech, Cripto, ETF)
-REVOLUT_WATCHLIST = [
+# Dizionario dei ticker con i rispettivi nomi completi per una lettura immediata
+ASSET_NAMES = {
     # Big Tech & US Stocks
-    "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "NFLX", "AMD", "INTC",
-    "CRM", "ADBE", "PYPL", "SQ", "SHOP", "UBER", "ABNB", "PLTR", "COIN", "HOOD",
-    "DIS", "NKE", "SBUX", "MCD", "KO", "PEP", "WMT", "COST", "JPM", "BAC",
-    "V", "MA", "GS", "JNJ", "PFE", "MRNA", "XOM", "CVX", "BA", "F", "GM",
-    "RIVN", "LCID", "NIO", "BABA", "TSM", "ASML", "SPOT", "SNAP", "ROKU",
+    "AAPL": "Apple Inc.",
+    "MSFT": "Microsoft Corporation",
+    "NVDA": "NVIDIA Corporation",
+    "GOOGL": "Alphabet Inc. (Google)",
+    "AMZN": "Amazon.com, Inc.",
+    "META": "Meta Platforms, Inc.",
+    "TSLA": "Tesla, Inc.",
+    "NFLX": "Netflix, Inc.",
+    "AMD": "Advanced Micro Devices",
+    "INTC": "Intel Corporation",
+    "CRM": "Salesforce, Inc.",
+    "ADBE": "Adobe Inc.",
+    "PYPL": "PayPal Holdings, Inc.",
+    "SQ": "Block, Inc. (Square)",
+    "SHOP": "Shopify Inc.",
+    "UBER": "Uber Technologies",
+    "ABNB": "Airbnb, Inc.",
+    "PLTR": "Palantir Technologies",
+    "COIN": "Coinbase Global, Inc.",
+    "HOOD": "Robinhood Markets",
+    "DIS": "The Walt Disney Company",
+    "NKE": "NIKE, Inc.",
+    "SBUX": "Starbucks Corporation",
+    "MCD": "McDonald's Corporation",
+    "KO": "The Coca-Cola Company",
+    "PEP": "PepsiCo, Inc.",
+    "WMT": "Walmart Inc.",
+    "COST": "Costco Wholesale Corp.",
+    "JPM": "JPMorgan Chase & Co.",
+    "BAC": "Bank of America Corp.",
+    "V": "Visa Inc.",
+    "MA": "Mastercard Incorporated",
+    "GS": "The Goldman Sachs Group",
+    "JNJ": "Johnson & Johnson",
+    "PFE": "Pfizer Inc.",
+    "MRNA": "Moderna, Inc.",
+    "XOM": "Exxon Mobil Corporation",
+    "CVX": "Chevron Corporation",
+    "BA": "The Boeing Company",
+    "F": "Ford Motor Company",
+    "GM": "General Motors Company",
+    "RIVN": "Rivian Automotive",
+    "LCID": "Lucid Group, Inc.",
+    "NIO": "NIO Inc.",
+    "BABA": "Alibaba Group Holding",
+    "TSM": "Taiwan Semiconductor",
+    "ASML": "ASML Holding N.V.",
+    "SPOT": "Spotify Technology S.A.",
+    "SNAP": "Snap Inc.",
+    "ROKU": "Roku, Inc.",
     # Criptovalute principali su Revolut
-    "BTC-USD", "ETH-USD", "SOL-USD", "XRP-USD", "ADA-USD", "DOGE-USD", 
-    "AVAX-USD", "DOT-USD", "LINK-USD", "MATIC-USD", "LTC-USD", "BCH-USD",
-    "UNI7083-USD", "ATOM-USD", "XLM-USD", "ALGO-USD", "NEAR-USD", "ICP-USD",
+    "BTC-USD": "Bitcoin",
+    "ETH-USD": "Ethereum",
+    "SOL-USD": "Solana",
+    "XRP-USD": "XRP",
+    "ADA-USD": "Cardano",
+    "DOGE-USD": "Dogecoin",
+    "AVAX-USD": "Avalanche",
+    "DOT-USD": "Polkadot",
+    "LINK-USD": "Chainlink",
+    "MATIC-USD": "Polygon",
+    "LTC-USD": "Litecoin",
+    "BCH-USD": "Bitcoin Cash",
+    "UNI7083-USD": "Uniswap",
+    "ATOM-USD": "Cosmos",
+    "XLM-USD": "Stellar",
+    "ALGO-USD": "Algorand",
+    "NEAR-USD": "NEAR Protocol",
+    "ICP-USD": "Internet Computer",
     # ETF Popolari
-    "SPY", "QQQ", "VOO", "VTI", "ARKK", "GLD", "SLV", "TLT"
-]
+    "SPY": "SPDR S&P 500 ETF Trust",
+    "QQQ": "Invesco QQQ Trust (Nasdaq 100)",
+    "VOO": "Vanguard S&P 500 ETF",
+    "VTI": "Vanguard Total Stock Market ETF",
+    "ARKK": "ARK Innovation ETF",
+    "GLD": "SPDR Gold Shares",
+    "SLV": "iShares Silver Trust",
+    "TLT": "iShares 20+ Year Treasury Bond"
+}
 
-# Funzione con cache (aggiorna i dati ogni 15 minuti per velocizzare l'app)
+REVOLUT_WATCHLIST = list(ASSET_NAMES.keys())
+
+# Funzione con cache (aggiorna i dati ogni 15 minuti)
 @st.cache_data(ttl=900)
 def scan_market(tickers):
-    # Scarica i dati storici degli ultimi 6 mesi per tutti i ticker insieme
     data = yf.download(tickers, period="6mo", group_by='ticker', threads=True, progress=False)
     results = []
 
@@ -66,11 +134,10 @@ def scan_market(tickers):
             if np.isnan(rsi) or np.isnan(ema_50):
                 continue
 
-            # Calcolo Score Probabilistico (da 0 a 100: >50 = Buy, <50 = Sell)
+            # Calcolo Score Probabilistico
             score = 50
             signals = []
 
-            # 1. Peso RSI
             if rsi < 30:
                 score += 25
                 signals.append("RSI Ipervenduto")
@@ -84,7 +151,6 @@ def scan_market(tickers):
                 score -= 10
                 signals.append("RSI Alto")
 
-            # 2. Peso Trend EMA
             if close_price > ema_20 > ema_50:
                 score += 15
                 signals.append("Trend Rialzista")
@@ -92,7 +158,6 @@ def scan_market(tickers):
                 score -= 15
                 signals.append("Trend Ribassista")
 
-            # 3. Peso Bande di Bollinger
             if close_price <= lower_bb:
                 score += 15
                 signals.append("Sotto Banda Inf. BB")
@@ -102,11 +167,11 @@ def scan_market(tickers):
 
             score = max(5, min(95, score))
             
-            # Calcolo probabilità direzionale
             buy_prob = score
             sell_prob = 100 - score
 
             results.append({
+                "Asset": ASSET_NAMES.get(ticker, ticker),
                 "Ticker": ticker,
                 "Prezzo ($)": round(close_price, 2),
                 "RSI": round(rsi, 1),
@@ -119,26 +184,23 @@ def scan_market(tickers):
 
     return pd.DataFrame(results)
 
-# Pulsante per forzare l'aggiornamento manuale
 if st.button("🔄 Aggiorna Scansione Mercato Ora"):
     st.cache_data.clear()
 
-with st.spinner("⏳ Scansione di oltre 75 asset e criptovalute su Revolut in corso..."):
+with st.spinner("⏳ Analisi di azioni, ETF e criptovalute su Revolut in corso..."):
     df_results = scan_market(REVOLUT_WATCHLIST)
 
 if df_results.empty:
     st.error("Errore nel recupero dei dati di mercato. Riprova tra qualche istante.")
 else:
-    # Ordina e filtra i Top 20 Buy e Top 20 Sell
     top_20_buy = df_results.sort_values(by="Prob. Buy (%)", ascending=False).head(20)[
-        ["Ticker", "Prezzo ($)", "RSI", "Prob. Buy (%)", "Segnali Principali"]
+        ["Asset", "Ticker", "Prezzo ($)", "RSI", "Prob. Buy (%)", "Segnali Principali"]
     ].reset_index(drop=True)
 
     top_20_sell = df_results.sort_values(by="Prob. Sell (%)", ascending=False).head(20)[
-        ["Ticker", "Prezzo ($)", "RSI", "Prob. Sell (%)", "Segnali Principali"]
+        ["Asset", "Ticker", "Prezzo ($)", "RSI", "Prob. Sell (%)", "Segnali Principali"]
     ].reset_index(drop=True)
 
-    # Visualizzazione a due colonne affiancate
     col1, col2 = st.columns(2)
 
     with col1:
